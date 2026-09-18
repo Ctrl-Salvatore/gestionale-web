@@ -67,7 +67,7 @@ def attiva_notifiche_browser(lista_task_in_preavviso):
             mostraPopup();
         }} else if (Notification.permission !== "denied") {{
             Notification.requestPermission().then(function (permission) {{
-                if (permission === "granted") {{ mostraPopup(); }
+                if (permission === "granted") {{ mostraPopup(); }}
             }});
         }}
     }}
@@ -238,11 +238,10 @@ def schermata_principale():
 
     id_board = st.session_state.board_attiva_id
 
-    # --- 1. KANBAN PROGETTI (Con ordinamento colonne e task colorate/modificabili) ---
+    # --- 1. KANBAN PROGETTI ---
     if menu == "📋 Board Progetti (Kanban)":
         st.header(f"📋 Board Progetti Kanban - {st.session_state.board_attiva_nome}")
 
-        # Opzione per nascondere le task completate
         nascondi_completate = st.checkbox("Nascondi task completate", value=False)
 
         progetti_docs = db.collection("progetti").where("id_board", "==", id_board).where("archiviato", "==", 0).stream()
@@ -258,7 +257,6 @@ def schermata_principale():
             for idx, prog in enumerate(progetti_lista):
                 prog_id = prog['id']
                 with colonne[idx]:
-                    # Intestazione colonna con bottoni per riordinare i progetti a sinistra/destra
                     c_tit, c_ord1, c_ord2 = st.columns([4, 1, 1])
                     with c_tit:
                         st.markdown(f"### 📁 {prog['nome']}")
@@ -285,17 +283,12 @@ def schermata_principale():
                         t_data = t_doc.to_dict()
                         t_id = t_doc.id
                         completata = t_data.get("completata", 0)
-                        stato = t_data.get("stato", "Normale") # Normale, Bloccata, etc.
+                        stato = t_data.get("stato", "Normale")
 
                         if nascondi_completate and completata == 1:
                             continue
 
-                        # Calcolo Colore Scheda
-                        #Verdi completate, arancioni in scadenza questa settimana, rosse bloccate o scadute
                         scad_str = t_data.get("scadenza", "")
-                        bordo_colore = "#e0e0e0" # neutro
-                        sfondo_colore = "transparent"
-                        
                         giorni_diff = 999
                         if scad_str:
                             try:
@@ -304,51 +297,55 @@ def schermata_principale():
                             except:
                                 pass
 
+                        # Gestione Colori tramite st.container e HTML/Markdown personalizzato per il bordo
+                        bordo_colore = "#d1d5db" # Neutro
                         if completata == 1:
-                            bordo_colore = "#28a745" # Verde
+                            bordo_colore = "#10b981" # Verde
                         elif stato == "Bloccata" or giorni_diff < 0:
-                            bordo_colore = "#dc3545" # Rosso
+                            bordo_colore = "#ef4444" # Rosso
                         elif 0 <= giorni_diff <= 7:
-                            bordo_colore = "#ffc107" # Arancione / Giallo settimana
+                            bordo_colore = "#f59e0b" # Arancione
 
-                        with st.container(border=True):
-                            st.markdown(f"**{t_data.get('titolo')}**")
-                            if t_data.get('sezione_nome') and t_data.get('sezione_nome') != "Nessuna":
-                                st.caption(f"🔗 {t_data.get('sezione_nome')}")
-                            st.caption(f"👤 {t_data.get('assegnatario', 'N/D')} | 📅 {scad_str or 'No scad'}")
-                            if t_data.get('note_task'):
-                                st.info(f"📝 {t_data.get('note_task')}")
+                        card_html = f"""
+                        <div style="border: 2px solid {bordo_colore}; border-radius: 8px; padding: 10px; margin-bottom: 10px; background-color: #ffffff;">
+                            <strong style="color: #111827;">{t_data.get('titolo')}</strong><br>
+                            <span style="font-size: 0.85em; color: #4b5563;">👤 {t_data.get('assegnatario', 'N/D')} | 📅 {scad_str or 'No scad'}</span><br>
+                            <span style="font-size: 0.8em; color: #1f2937; background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px;">Stato: {stato}</span>
+                        </div>
+                        """
+                        st.markdown(card_html, unsafe_allow_html=True)
 
-                            # Expander per modificare la task o cambiarne lo stato
-                            with st.expander("⚙️ Modifica Task"):
-                                with st.form(f"form_mod_task_{t_id}"):
-                                    nuovo_titolo = st.text_input("Titolo", value=t_data.get('titolo', ''))
-                                    nuove_note = st.text_area("Note Task", value=t_data.get('note_task', ''))
-                                    nuovo_assegnatario = st.text_input("Assegnato a", value=t_data.get('assegnatario', ''))
-                                    
-                                    ha_scad = st.bool = st.checkbox("Ha scadenza", value=bool(scad_str))
-                                    nuova_scad = st.date_input("Data scadenza", value=datetime.strptime(scad_str, "%Y-%m-%d").date() if scad_str else date.today())
-                                    
-                                    nuovo_stato = st.selectbox("Stato Task", ["Normale", "Bloccata"], index=0 if stato != "Bloccata" else 1)
-                                    nuova_completata = st.selectbox("Completata?", [0, 1], index=completata, format_func=lambda x: "Sì" if x==1 else "No")
+                        if t_data.get('note_task'):
+                            st.info(f"📝 {t_data.get('note_task')}")
 
-                                    if st.form_submit_button("Salva Modifiche"):
-                                        db.collection("task").document(t_id).update({
-                                            "titolo": nuovo_titolo,
-                                            "note_task": nuove_note,
-                                            "assegnatario": nuovo_assegnatario,
-                                            "scadenza": nuova_scad.strftime("%Y-%m-%d") if ha_scad else "",
-                                            "stato": nuovo_stato,
-                                            "completata": nuova_completata
-                                        })
-                                        st.success("Aggiornato!")
-                                        st.rerun()
+                        with st.expander("⚙️ Modifica Task"):
+                            with st.form(f"form_mod_task_{t_id}"):
+                                nuovo_titolo = st.text_input("Titolo", value=t_data.get('titolo', ''))
+                                nuove_note = st.text_area("Note Task", value=t_data.get('note_task', ''))
+                                nuovo_assegnatario = st.text_input("Assegnato a", value=t_data.get('assegnatario', ''))
+                                
+                                ha_scad = st.checkbox("Ha scadenza", value=bool(scad_str))
+                                nuova_scad = st.date_input("Data scadenza", value=datetime.strptime(scad_str, "%Y-%m-%d").date() if scad_str else date.today())
+                                
+                                nuovo_stato = st.selectbox("Stato Task", ["Normale", "Bloccata"], index=0 if stato != "Bloccata" else 1)
+                                nuova_completata = st.selectbox("Completata?", [0, 1], index=completata, format_func=lambda x: "Sì" if x==1 else "No")
 
-                            if st.button("🗑️ Elimina", key=f"del_t_{t_id}"):
-                                db.collection("task").document(t_id).delete()
-                                st.rerun()
+                                if st.form_submit_button("Salva Modifiche"):
+                                    db.collection("task").document(t_id).update({
+                                        "titolo": nuovo_titolo,
+                                        "note_task": nuove_note,
+                                        "assegnatario": nuovo_assegnatario,
+                                        "scadenza": nuova_scad.strftime("%Y-%m-%d") if ha_scad else "",
+                                        "stato": nuovo_stato,
+                                        "completata": nuova_completata
+                                    })
+                                    st.success("Aggiornato!")
+                                    st.rerun()
 
-                    # Form Aggiungi Task
+                        if st.button("🗑️ Elimina Task", key=f"del_t_{t_id}"):
+                            db.collection("task").document(t_id).delete()
+                            st.rerun()
+
                     with st.expander("➕ Aggiungi Task"):
                         sez_docs = db.collection("sezioni_appunti").where("id_progetto", "==", prog_id).stream()
                         opzioni_sezioni = ["Nessuna"] + [s.to_dict()['nome'] for s in sez_docs]
@@ -480,6 +477,7 @@ def schermata_principale():
                         st.rerun()
 
             sezioni = sorted([{"id": s.id, **s.to_dict()} for s in db.collection("sezioni_appunti").where("id_progetto", "==", p_id).stream()], key=lambda x: x.get('ordine', 0))
+            
             for i, sez in enumerate(sezioni):
                 with st.container(border=True):
                     c1, c2 = st.columns([5, 1])
@@ -487,16 +485,24 @@ def schermata_principale():
                         st.markdown(f"### 📌 {sez['nome']}")
                         st.write(sez['contenuto'])
                     with c2:
-                        if i > 0 and st.button("⬆️", key=f"sup_{sez['id']}"):
-                            prev_s = sezioni[i-1]
-                            db.collection("sezioni_appunti").document(sez['id']).update({"ordine": prev_s.get('ordine', i)})
-                            db.collection("sezioni_appunti").document(prev_s['id']).update({"ordine": sez.get('ordine', i+1)})
-                            st.rerun()
-                        if i < len(sezioni)-1 and st.button("⬇️", key=f"sdown_{sez['id']}"):
-                            next_s = sezioni[i+1]
-                            db.collection("sezioni_appunti").document(sez['id']).update({"ordine": next_s.get('ordine', i+2)})
-                            db.collection("sezioni_appunti").document(next_s['id']).update({"ordine": sez.get('ordine', i+1)})
-                            st.rerun()
+                        if i > 0:
+                            if st.button("⬆️", key=f"sup_{sez['id']}"):
+                                prev_s = sezioni[i-1]
+                                ordine_attuale = sez.get('ordine', i)
+                                ordine_precedente = prev_s.get('ordine', i-1)
+                                db.collection("sezioni_appunti").document(sez['id']).update({"ordine": ordine_precedente})
+                                db.collection("sezioni_appunti").document(prev_s['id']).update({"ordine": ordine_attuale})
+                                st.rerun()
+                                
+                        if i < len(sezioni) - 1:
+                            if st.button("⬇️", key=f"sdown_{sez['id']}"):
+                                next_s = sezioni[i+1]
+                                ordine_attuale = sez.get('ordine', i)
+                                ordine_successivo = next_s.get('ordine', i+1)
+                                db.collection("sezioni_appunti").document(sez['id']).update({"ordine": ordine_successivo})
+                                db.collection("sezioni_appunti").document(next_s['id']).update({"ordine": ordine_attuale})
+                                st.rerun()
+                                
                         if st.button("🗑️", key=f"sdel_{sez['id']}"):
                             db.collection("sezioni_appunti").document(sez['id']).delete()
                             st.rerun()
