@@ -33,53 +33,34 @@ st.set_page_config(page_title="Gestionale Progetti Cloud", page_icon="📋", lay
 # ==========================================
 st.markdown("""
 <style>
-    /* Tema generale e sfondi */
     .stApp {
         background-color: #f8fafc;
         font-family: 'Inter', sans-serif;
     }
-    
-    /* Intestazioni */
     h1, h2, h3 {
         color: #0f172a;
         font-weight: 700;
     }
-    
-    /* Pulsanti principali in stile coerente */
     .stButton>button {
-        background-color: #0d9488; /* Verde/Teal istituzionale */
+        background-color: #0d9488;
         color: white;
         border-radius: 8px;
         border: none;
-        padding: 0.5rem 1rem;
+        padding: 0.4rem 0.8rem;
         font-weight: 600;
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
     }
     .stButton>button:hover {
         background-color: #0f766e;
         color: #ffffff;
     }
-    
-    /* Pulsanti di eliminazione o pericolo */
-    button[kind="primary"] {
-        background-color: #e11d48 !important;
-    }
-    
-    /* Container e schede */
-    div[data-testid="stVerticalBlock"] > div[style*="border"] {
-        border-radius: 12px;
-        border: 1px solid #e2e8f0 !important;
-        background-color: #ffffff;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    }
-    
-    /* Sidebar pulita e professionale */
     [data-testid="stSidebar"] {
         background-color: #ffffff;
         border-right: 1px solid #e2e8f0;
     }
 </style>
 """, unsafe_allow_html=True)
+
 # ==========================================
 # GESTIONE SESSIONE & STATI
 # ==========================================
@@ -139,6 +120,59 @@ def attiva_notifiche_browser(lista_task_in_preavviso):
     """
     components.html(js_code, height=0, width=0)
     st.session_state.data_ultima_notifica = oggi_str
+
+# ==========================================
+# MODALE (POP-UP) PER MODIFICA TASK
+# ==========================================
+@st.dialog("⚙️ Gestisci Task")
+def modal_modifica_task(t_id, t_data, prog_id):
+    st.subheader(f"Modifica: {t_data.get('titolo')}")
+    
+    with st.form(f"form_mod_popup_{t_id}"):
+        nuovo_titolo = st.text_input("Titolo Task", value=t_data.get('titolo', ''))
+        nuove_note = st.text_area("Note / Descrizione", value=t_data.get('note_task', ''))
+        
+        # Recuperiamo le sezioni del progetto per poterla assegnare/cambiare
+        sez_docs = db.collection("sezioni_appunti").where("id_progetto", "==", prog_id).stream()
+        opzioni_sezioni = ["Nessuna"] + [s.to_dict()['nome'] for s in sez_docs]
+        sezione_attuale = t_data.get('sezione_nome', 'Nessuna')
+        idx_sez = opzioni_sezioni.index(sezione_attuale) if sezione_attuale in opzioni_sezioni else 0
+        
+        nuova_sezione = st.selectbox("Collega a Sezione Appunti", opzioni_sezioni, index=idx_sez)
+        nuovo_assegnatario = st.text_input("Assegnato a", value=t_data.get('assegnatario', ''))
+        
+        scad_str = t_data.get('scadenza', '')
+        ha_scad = st.checkbox("Imposta Scadenza", value=bool(scad_str))
+        nuova_scad = st.date_input("Data Scadenza", value=datetime.strptime(scad_str, "%Y-%m-%d").date() if scad_str else date.today())
+        
+        stato = t_data.get("stato", "Normale")
+        nuovo_stato = st.selectbox("Stato Task", ["Normale", "Bloccata"], index=0 if stato != "Bloccata" else 1)
+        completata = t_data.get("completata", 0)
+        nuova_completata = st.selectbox("Completata?", [0, 1], index=completata, format_func=lambda x: "Sì" if x==1 else "No")
+
+        col_salva, col_elimina = st.columns(2)
+        with col_salva:
+            btn_salva = st.form_submit_button("Salva Modifiche")
+        with col_elimina:
+            btn_elimina = st.form_submit_button("Elimina Task", type="primary")
+
+        if btn_salva:
+            db.collection("task").document(t_id).update({
+                "titolo": nuovo_titolo,
+                "note_task": nuove_note,
+                "sezione_nome": nuova_sezione,
+                "assegnatario": nuovo_assegnatario,
+                "scadenza": nuova_scad.strftime("%Y-%m-%d") if ha_scad else "",
+                "stato": nuovo_stato,
+                "completata": nuova_completata
+            })
+            st.success("Task aggiornata con successo!")
+            st.rerun()
+            
+        if btn_elimina:
+            db.collection("task").document(t_id).delete()
+            st.success("Task eliminata!")
+            st.rerun()
 
 # ==========================================
 # LOGIN / REGISTRAZIONE
@@ -303,23 +337,26 @@ def schermata_principale():
         if not progetti_lista:
             st.info("Nessun progetto trovato. Creane uno nella scheda 'Progetti'.")
         else:
+            # Per gestire la responsività ed evitare accavallamenti se ci sono molti progetti,
+            # usiamo un layout a colonne pulito
             colonne = st.columns(len(progetti_lista))
             oggi = date.today()
 
             for idx, prog in enumerate(progetti_lista):
                 prog_id = prog['id']
                 with colonne[idx]:
-                    c_tit, c_ord1, c_ord2 = st.columns([4, 1, 1])
-                    with c_tit:
-                        st.markdown(f"### 📁 {prog['nome']}")
-                    with c_ord1:
-                        if idx > 0 and st.button("⬅️", key=f"p_left_{prog_id}"):
+                    st.markdown(f"### 📁 {prog['nome']}")
+                    
+                    # Pulsanti di spostamento colonna compatti
+                    c_l, c_r = st.columns(2)
+                    with c_l:
+                        if idx > 0 and st.button("◀️ Sposta", key=f"p_left_{prog_id}"):
                             prev_p = progetti_lista[idx - 1]
                             db.collection("progetti").document(prog_id).update({"ordine": prev_p.get('ordine', idx)})
                             db.collection("progetti").document(prev_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
                             st.rerun()
-                    with c_ord2:
-                        if idx < len(progetti_lista) - 1 and st.button("➡️", key=f"p_right_{prog_id}"):
+                    with c_r:
+                        if idx < len(progetti_lista) - 1 and st.button("Sposta ▶️", key=f"p_right_{prog_id}"):
                             next_p = progetti_lista[idx + 1]
                             db.collection("progetti").document(prog_id).update({"ordine": next_p.get('ordine', idx + 2)})
                             db.collection("progetti").document(next_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
@@ -349,8 +386,8 @@ def schermata_principale():
                             except:
                                 pass
 
-                        # Gestione Colori tramite st.container e HTML/Markdown personalizzato per il bordo
-                        bordo_colore = "#d1d5db" # Neutro
+                        # Colori bordo scheda
+                        bordo_colore = "#cbd5e1" 
                         if completata == 1:
                             bordo_colore = "#10b981" # Verde
                         elif stato == "Bloccata" or giorni_diff < 0:
@@ -358,11 +395,15 @@ def schermata_principale():
                         elif 0 <= giorni_diff <= 7:
                             bordo_colore = "#f59e0b" # Arancione
 
+                        # Mostriamo chiaramente anche la sezione collegata se presente
+                        sezione_collegata = t_data.get('sezione_nome', 'Nessuna')
+                        badge_sezione = f"🔗 {sezione_collegata}" if sezione_collegata and sezione_collegata != "Nessuna" else ""
+
                         card_html = f"""
-                        <div style="border: 2px solid {bordo_colore}; border-radius: 8px; padding: 10px; margin-bottom: 10px; background-color: #ffffff;">
-                            <strong style="color: #111827;">{t_data.get('titolo')}</strong><br>
-                            <span style="font-size: 0.85em; color: #4b5563;">👤 {t_data.get('assegnatario', 'N/D')} | 📅 {scad_str or 'No scad'}</span><br>
-                            <span style="font-size: 0.8em; color: #1f2937; background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px;">Stato: {stato}</span>
+                        <div style="border: 2px solid {bordo_colore}; border-radius: 8px; padding: 10px; margin-bottom: 8px; background-color: #ffffff;">
+                            <strong style="color: #0f172a;">{t_data.get('titolo')}</strong><br>
+                            <span style="font-size: 0.85em; color: #475569;">👤 {t_data.get('assegnatario', 'N/D')} | 📅 {scad_str or 'No scad'}</span><br>
+                            <span style="font-size: 0.8em; color: #334155; background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px;">{badge_sezione} | Stato: {stato}</span>
                         </div>
                         """
                         st.markdown(card_html, unsafe_allow_html=True)
@@ -370,33 +411,9 @@ def schermata_principale():
                         if t_data.get('note_task'):
                             st.info(f"📝 {t_data.get('note_task')}")
 
-                        with st.expander("⚙️ Modifica Task"):
-                            with st.form(f"form_mod_task_{t_id}"):
-                                nuovo_titolo = st.text_input("Titolo", value=t_data.get('titolo', ''))
-                                nuove_note = st.text_area("Note Task", value=t_data.get('note_task', ''))
-                                nuovo_assegnatario = st.text_input("Assegnato a", value=t_data.get('assegnatario', ''))
-                                
-                                ha_scad = st.checkbox("Ha scadenza", value=bool(scad_str))
-                                nuova_scad = st.date_input("Data scadenza", value=datetime.strptime(scad_str, "%Y-%m-%d").date() if scad_str else date.today())
-                                
-                                nuovo_stato = st.selectbox("Stato Task", ["Normale", "Bloccata"], index=0 if stato != "Bloccata" else 1)
-                                nuova_completata = st.selectbox("Completata?", [0, 1], index=completata, format_func=lambda x: "Sì" if x==1 else "No")
-
-                                if st.form_submit_button("Salva Modifiche"):
-                                    db.collection("task").document(t_id).update({
-                                        "titolo": nuovo_titolo,
-                                        "note_task": nuove_note,
-                                        "assegnatario": nuovo_assegnatario,
-                                        "scadenza": nuova_scad.strftime("%Y-%m-%d") if ha_scad else "",
-                                        "stato": nuovo_stato,
-                                        "completata": nuova_completata
-                                    })
-                                    st.success("Aggiornato!")
-                                    st.rerun()
-
-                        if st.button("🗑️ Elimina Task", key=f"del_t_{t_id}"):
-                            db.collection("task").document(t_id).delete()
-                            st.rerun()
+                        # Pulsante per aprire il popup (modale) di modifica ed eliminazione
+                        if st.button("⚙️ Modifica / Apri", key=f"btn_mod_{t_id}"):
+                            modal_modifica_task(t_id, t_data, prog_id)
 
                     with st.expander("➕ Aggiungi Task"):
                         sez_docs = db.collection("sezioni_appunti").where("id_progetto", "==", prog_id).stream()
@@ -405,7 +422,7 @@ def schermata_principale():
                         with st.form(f"form_task_{prog_id}"):
                             t_titolo = st.text_input("Titolo Task")
                             t_nota = st.text_area("Note / Descrizione Task")
-                            t_sez = st.selectbox("Sezione", opzioni_sezioni)
+                            t_sez = st.selectbox("Collega a Sezione Appunti", opzioni_sezioni)
                             t_assegnatario = st.text_input("Assegnato a", value=st.session_state.utente_loggato)
                             t_scad = st.date_input("Scadenza")
                             
@@ -478,7 +495,7 @@ def schermata_principale():
                 for t in db.collection("task").stream():
                     t_data = t.to_dict()
                     if t_data.get("id_progetto") in progetti_dict and t_data.get("scadenza"):
-                        colore = "#28a745" if t_data.get("completata") == 1 else "#007bff"
+                        colore = "#10b981" if t_data.get("completata") == 1 else "#0d9488"
                         events.append({
                             "title": f"[{progetti_dict[t_data['id_progetto']]}] {t_data['titolo']}",
                             "start": t_data['scadenza'],
