@@ -338,30 +338,30 @@ def schermata_principale():
         else:
             oggi = date.today()
 
-            # INIZIO HACK CSS NATIVO PER STREAMLIT
-            # Questo CSS trasforma SOLO in questa schermata i normali st.columns in colonne Kanban a scorrimento orizzontale
+            # INIZIO HACK CSS: Forza rigidamente larghezza e comportamento a scorrimento
             st.markdown("""
             <style>
-                /* Applica scorrimento orizzontale al contenitore principale delle colonne */
+                /* Contenitore principale (riga orizzontale) */
                 div[data-testid="stHorizontalBlock"] {
                     flex-wrap: nowrap !important;
                     overflow-x: auto !important;
-                    padding-bottom: 1rem;
+                    padding-bottom: 20px;
                     align-items: flex-start !important;
                 }
                 
-                /* Forza la larghezza fissa delle colonne Kanban */
+                /* Colonne Kanban principali (IGNORA le percentuali di Streamlit) */
                 div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-                    min-width: 330px !important;
-                    max-width: 330px !important;
-                    flex: 0 0 auto !important;
+                    min-width: 360px !important; /* Forza larghezza minima */
+                    max-width: 360px !important; /* Forza larghezza massima */
+                    width: 360px !important;     /* Sovrascrive le percentuali inline! */
+                    flex: 0 0 360px !important;  /* Blocca la crescita/riduzione del flexbox */
                     background-color: #f1f5f9;
                     padding: 15px;
                     border-radius: 10px;
                     border: 1px solid #e2e8f0;
                 }
 
-                /* Resetta il comportamento per eventuali sotto-colonne annidate (es. pulsanti destra/sinistra) */
+                /* RESET per le sotto-colonne all'interno delle card (es. bottoni di spostamento) */
                 div[data-testid="column"] div[data-testid="stHorizontalBlock"] {
                     flex-wrap: wrap !important;
                     overflow-x: visible !important;
@@ -370,6 +370,7 @@ def schermata_principale():
                 div[data-testid="column"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
                     min-width: 0 !important;
                     max-width: none !important;
+                    width: auto !important;
                     flex: 1 1 0% !important;
                     background-color: transparent !important;
                     padding: 0 !important;
@@ -378,14 +379,12 @@ def schermata_principale():
             </style>
             """, unsafe_allow_html=True)
 
-            # Creiamo le colonne nativamente con Streamlit (che verranno gestite dal CSS qui sopra)
             colonne = st.columns(len(progetti_lista))
 
             for idx, prog in enumerate(progetti_lista):
                 prog_id = prog['id']
                 
                 with colonne[idx]:
-                    # Titolo e Controlli Colonna
                     st.markdown(f"<h3 style='margin-top:0;'>📁 {prog['nome']}</h3>", unsafe_allow_html=True)
                     if prog.get('descrizione'):
                         st.caption(prog['descrizione'])
@@ -406,7 +405,6 @@ def schermata_principale():
                     
                     st.markdown("---")
 
-                    # TASKS
                     tasks_docs = db.collection("task").where("id_progetto", "==", prog_id).stream()
                     
                     for t_doc in tasks_docs:
@@ -438,7 +436,6 @@ def schermata_principale():
                         sezione_collegata = t_data.get('sezione_nome', 'Nessuna')
                         badge_sezione = f"🔗 {sezione_collegata}" if sezione_collegata and sezione_collegata != "Nessuna" else ""
 
-                        # HTML della singola Task Card
                         card_html = f"""
                         <div style="border: 2px solid {bordo_colore}; border-radius: 8px; padding: 12px; background-color: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 5px;">
                             <strong style="color: #0f172a; font-size: 1.05em;">{t_data.get('titolo')}</strong><br>
@@ -446,19 +443,16 @@ def schermata_principale():
                             <div style="margin-top: 6px;"><span style="font-size: 0.8em; color: #334155; background-color: #f1f5f9; padding: 3px 8px; border-radius: 4px;">{badge_sezione} | Stato: {stato}</span></div>
                         </div>
                         """
-                        # Disegniamo la card
                         st.markdown(card_html, unsafe_allow_html=True)
                         
                         if t_data.get('note_task'):
                             st.info(f"📝 {t_data.get('note_task')}")
 
-                        # Nativamente creiamo il bottone che si posiziona subito sotto la card HTML
                         if st.button("⚙️ Modifica / Apri", key=f"btn_mod_{t_id}", use_container_width=True):
                             modal_modifica_task(t_id, t_data, prog_id)
                         
                         st.markdown("<br>", unsafe_allow_html=True)
 
-                    # AGGIUNGI TASK
                     with st.expander("➕ Nuova Task"):
                         sez_docs = db.collection("sezioni_appunti").where("id_progetto", "==", prog_id).stream()
                         opzioni_sezioni = ["Nessuna"] + [s.to_dict()['nome'] for s in sez_docs]
