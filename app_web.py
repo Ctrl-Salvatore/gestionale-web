@@ -325,7 +325,7 @@ def schermata_principale():
     id_board = st.session_state.board_attiva_id
 
     # --- 1. KANBAN PROGETTI ---
-    if menu == "📋 Board Progetti (Kanban)":
+    elif menu == "📋 Board Progetti (Kanban)":
         st.header(f"📋 Board Progetti Kanban - {st.session_state.board_attiva_nome}")
 
         nascondi_completate = st.checkbox("Nascondi task completate", value=False)
@@ -337,110 +337,139 @@ def schermata_principale():
         if not progetti_lista:
             st.info("Nessun progetto trovato. Creane uno nella scheda 'Progetti'.")
         else:
-            # Per gestire la responsività ed evitare accavallamenti se ci sono molti progetti,
-            # usiamo un layout a colonne pulito
-            colonne = st.columns(len(progetti_lista))
             oggi = date.today()
+
+            # Contenitore con scorrimento orizzontale per le colonne Kanban
+            st.markdown("""
+            <style>
+                .kanban-scroll-container {
+                    display: flex;
+                    flex-direction: row;
+                    gap: 1rem;
+                    overflow-x: auto;
+                    padding-bottom: 1rem;
+                    width: 100%;
+                }
+                .kanban-column {
+                    min-width: 320px;
+                    max-width: 350px;
+                    flex: 0 0 auto;
+                    background-color: #ffffff;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
+                    padding: 1rem;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                }
+            </style>
+            """, unsafe_allow_html=True)
+
+            # Apertura del contenitore orizzontale HTML
+            st.markdown('<div class="kanban-scroll-container">', unsafe_allow_html=True)
 
             for idx, prog in enumerate(progetti_lista):
                 prog_id = prog['id']
-                with colonne[idx]:
-                    st.markdown(f"### 📁 {prog['nome']}")
-                    
-                    # Pulsanti di spostamento colonna compatti
-                    c_l, c_r = st.columns(2)
-                    with c_l:
-                        if idx > 0 and st.button("◀️ Sposta", key=f"p_left_{prog_id}"):
-                            prev_p = progetti_lista[idx - 1]
-                            db.collection("progetti").document(prog_id).update({"ordine": prev_p.get('ordine', idx)})
-                            db.collection("progetti").document(prev_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
+                
+                # Renderizziamo ogni colonna come blocco a scorrimento
+                st.markdown(f'<div class="kanban-column">', unsafe_allow_html=True)
+                
+                st.markdown(f"### 📁 {prog['nome']}")
+                
+                # Pulsanti di spostamento colonna compatti
+                c_l, c_r = st.columns(2)
+                with c_l:
+                    if idx > 0 and st.button("◀️", key=f"p_left_{prog_id}"):
+                        prev_p = progetti_lista[idx - 1]
+                        db.collection("progetti").document(prog_id).update({"ordine": prev_p.get('ordine', idx)})
+                        db.collection("progetti").document(prev_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
+                        st.rerun()
+                with c_r:
+                    if idx < len(progetti_lista) - 1 and st.button("▶️", key=f"p_right_{prog_id}"):
+                        next_p = progetti_lista[idx + 1]
+                        db.collection("progetti").document(prog_id).update({"ordine": next_p.get('ordine', idx + 2)})
+                        db.collection("progetti").document(next_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
+                        st.rerun()
+
+                if prog.get('descrizione'):
+                    st.caption(prog['descrizione'])
+                st.markdown("---")
+
+                tasks_docs = db.collection("task").where("id_progetto", "==", prog_id).stream()
+                
+                for t_doc in tasks_docs:
+                    t_data = t_doc.to_dict()
+                    t_id = t_doc.id
+                    completata = t_data.get("completata", 0)
+                    stato = t_data.get("stato", "Normale")
+
+                    if nascondi_completate and completata == 1:
+                        continue
+
+                    scad_str = t_data.get("scadenza", "")
+                    giorni_diff = 999
+                    if scad_str:
+                        try:
+                            d_scad = datetime.strptime(scad_str, "%Y-%m-%d").date()
+                            giorni_diff = (d_scad - oggi).days
+                        except:
+                            pass
+
+                    bordo_colore = "#cbd5e1" 
+                    if completata == 1:
+                        bordo_colore = "#10b981" # Verde
+                    elif stato == "Bloccata" or giorni_diff < 0:
+                        bordo_colore = "#ef4444" # Rosso
+                    elif 0 <= giorni_diff <= 7:
+                        bordo_colore = "#f59e0b" # Arancione
+
+                    sezione_collegata = t_data.get('sezione_nome', 'Nessuna')
+                    badge_sezione = f"🔗 {sezione_collegata}" if sezione_collegata and sezione_collegata != "Nessuna" else ""
+
+                    card_html = f"""
+                    <div style="border: 2px solid {bordo_colore}; border-radius: 8px; padding: 10px; margin-bottom: 8px; background-color: #f8fafc;">
+                        <strong style="color: #0f172a;">{t_data.get('titolo')}</strong><br>
+                        <span style="font-size: 0.85em; color: #475569;">👤 {t_data.get('assegnatario', 'N/D')} | 📅 {scad_str or 'No scad'}</span><br>
+                        <span style="font-size: 0.8em; color: #334155; background-color: #e2e8f0; padding: 2px 6px; border-radius: 4px;">{badge_sezione} | Stato: {stato}</span>
+                    </div>
+                    """
+                    st.markdown(card_html, unsafe_allow_html=True)
+
+                    if t_data.get('note_task'):
+                        st.info(f"📝 {t_data.get('note_task')}")
+
+                    if st.button("⚙️ Modifica / Apri", key=f"btn_mod_{t_id}"):
+                        modal_modifica_task(t_id, t_data, prog_id)
+
+                with st.expander("➕ Aggiungi Task"):
+                    sez_docs = db.collection("sezioni_appunti").where("id_progetto", "==", prog_id).stream()
+                    opzioni_sezioni = ["Nessuna"] + [s.to_dict()['nome'] for s in sez_docs]
+
+                    with st.form(f"form_task_{prog_id}"):
+                        t_titolo = st.text_input("Titolo Task")
+                        t_nota = st.text_area("Note / Descrizione Task")
+                        t_sez = st.selectbox("Collega a Sezione Appunti", opzioni_sezioni)
+                        t_assegnatario = st.text_input("Assegnato a", value=st.session_state.utente_loggato)
+                        t_scad = st.date_input("Scadenza")
+                        
+                        if st.form_submit_button("Crea Task"):
+                            db.collection("task").add({
+                                "id_progetto": prog_id,
+                                "titolo": t_titolo,
+                                "note_task": t_nota,
+                                "sezione_nome": t_sez,
+                                "assegnatario": t_assegnatario,
+                                "scadenza": t_scad.strftime("%Y-%m-%d"),
+                                "stato": "Normale",
+                                "completata": 0,
+                                "preavviso": 3
+                            })
+                            st.success("Task creata!")
                             st.rerun()
-                    with c_r:
-                        if idx < len(progetti_lista) - 1 and st.button("Sposta ▶️", key=f"p_right_{prog_id}"):
-                            next_p = progetti_lista[idx + 1]
-                            db.collection("progetti").document(prog_id).update({"ordine": next_p.get('ordine', idx + 2)})
-                            db.collection("progetti").document(next_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
-                            st.rerun()
 
-                    if prog.get('descrizione'):
-                        st.caption(prog['descrizione'])
-                    st.markdown("---")
+                # Chiusura div singola colonna Kanban
+                st.markdown('</div>', unsafe_allow_html=True)
 
-                    tasks_docs = db.collection("task").where("id_progetto", "==", prog_id).stream()
-                    
-                    for t_doc in tasks_docs:
-                        t_data = t_doc.to_dict()
-                        t_id = t_doc.id
-                        completata = t_data.get("completata", 0)
-                        stato = t_data.get("stato", "Normale")
-
-                        if nascondi_completate and completata == 1:
-                            continue
-
-                        scad_str = t_data.get("scadenza", "")
-                        giorni_diff = 999
-                        if scad_str:
-                            try:
-                                d_scad = datetime.strptime(scad_str, "%Y-%m-%d").date()
-                                giorni_diff = (d_scad - oggi).days
-                            except:
-                                pass
-
-                        # Colori bordo scheda
-                        bordo_colore = "#cbd5e1" 
-                        if completata == 1:
-                            bordo_colore = "#10b981" # Verde
-                        elif stato == "Bloccata" or giorni_diff < 0:
-                            bordo_colore = "#ef4444" # Rosso
-                        elif 0 <= giorni_diff <= 7:
-                            bordo_colore = "#f59e0b" # Arancione
-
-                        # Mostriamo chiaramente anche la sezione collegata se presente
-                        sezione_collegata = t_data.get('sezione_nome', 'Nessuna')
-                        badge_sezione = f"🔗 {sezione_collegata}" if sezione_collegata and sezione_collegata != "Nessuna" else ""
-
-                        card_html = f"""
-                        <div style="border: 2px solid {bordo_colore}; border-radius: 8px; padding: 10px; margin-bottom: 8px; background-color: #ffffff;">
-                            <strong style="color: #0f172a;">{t_data.get('titolo')}</strong><br>
-                            <span style="font-size: 0.85em; color: #475569;">👤 {t_data.get('assegnatario', 'N/D')} | 📅 {scad_str or 'No scad'}</span><br>
-                            <span style="font-size: 0.8em; color: #334155; background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px;">{badge_sezione} | Stato: {stato}</span>
-                        </div>
-                        """
-                        st.markdown(card_html, unsafe_allow_html=True)
-
-                        if t_data.get('note_task'):
-                            st.info(f"📝 {t_data.get('note_task')}")
-
-                        # Pulsante per aprire il popup (modale) di modifica ed eliminazione
-                        if st.button("⚙️ Modifica / Apri", key=f"btn_mod_{t_id}"):
-                            modal_modifica_task(t_id, t_data, prog_id)
-
-                    with st.expander("➕ Aggiungi Task"):
-                        sez_docs = db.collection("sezioni_appunti").where("id_progetto", "==", prog_id).stream()
-                        opzioni_sezioni = ["Nessuna"] + [s.to_dict()['nome'] for s in sez_docs]
-
-                        with st.form(f"form_task_{prog_id}"):
-                            t_titolo = st.text_input("Titolo Task")
-                            t_nota = st.text_area("Note / Descrizione Task")
-                            t_sez = st.selectbox("Collega a Sezione Appunti", opzioni_sezioni)
-                            t_assegnatario = st.text_input("Assegnato a", value=st.session_state.utente_loggato)
-                            t_scad = st.date_input("Scadenza")
-                            
-                            if st.form_submit_button("Crea Task"):
-                                db.collection("task").add({
-                                    "id_progetto": prog_id,
-                                    "titolo": t_titolo,
-                                    "note_task": t_nota,
-                                    "sezione_nome": t_sez,
-                                    "assegnatario": t_assegnatario,
-                                    "scadenza": t_scad.strftime("%Y-%m-%d"),
-                                    "stato": "Normale",
-                                    "completata": 0,
-                                    "preavviso": 3
-                                })
-                                st.success("Task creata!")
-                                st.rerun()
-
+            # Chiusura div contenitore principale di scorrimento
+            st.markdown('</div>', unsafe_allow_html=True)
     # --- 2. BOARD SCADENZE ---
     elif menu == "⏳ Board Scadenze":
         st.header("⏳ Board Scadenze")
