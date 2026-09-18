@@ -29,6 +29,58 @@ db = firestore.client()
 st.set_page_config(page_title="Gestionale Progetti Cloud", page_icon="📋", layout="wide")
 
 # ==========================================
+# STILE GRAFICO ISPIRATO A EUTHRIVE
+# ==========================================
+st.markdown("""
+<style>
+    /* Tema generale e sfondi */
+    .stApp {
+        background-color: #f8fafc;
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Intestazioni */
+    h1, h2, h3 {
+        color: #0f172a;
+        font-weight: 700;
+    }
+    
+    /* Pulsanti principali in stile coerente */
+    .stButton>button {
+        background-color: #0d9488; /* Verde/Teal istituzionale */
+        color: white;
+        border-radius: 8px;
+        border: none;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        background-color: #0f766e;
+        color: #ffffff;
+    }
+    
+    /* Pulsanti di eliminazione o pericolo */
+    button[kind="primary"] {
+        background-color: #e11d48 !important;
+    }
+    
+    /* Container e schede */
+    div[data-testid="stVerticalBlock"] > div[style*="border"] {
+        border-radius: 12px;
+        border: 1px solid #e2e8f0 !important;
+        background-color: #ffffff;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Sidebar pulita e professionale */
+    [data-testid="stSidebar"] {
+        background-color: #ffffff;
+        border-right: 1px solid #e2e8f0;
+    }
+</style>
+""", unsafe_allow_html=True)
+# ==========================================
 # GESTIONE SESSIONE & STATI
 # ==========================================
 if "utente_loggato" not in st.session_state:
