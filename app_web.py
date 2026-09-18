@@ -58,6 +58,26 @@ st.markdown("""
         background-color: #ffffff;
         border-right: 1px solid #e2e8f0;
     }
+    
+    /* Stile per il Kanban orizzontale fluido */
+    .kanban-wrapper {
+        display: flex;
+        flex-direction: row;
+        gap: 20px;
+        overflow-x: auto;
+        padding-bottom: 20px;
+        width: 100%;
+    }
+    .kanban-column {
+        min-width: 330px;
+        max-width: 330px;
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        flex-shrink: 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -132,7 +152,6 @@ def modal_modifica_task(t_id, t_data, prog_id):
         nuovo_titolo = st.text_input("Titolo Task", value=t_data.get('titolo', ''))
         nuove_note = st.text_area("Note / Descrizione", value=t_data.get('note_task', ''))
         
-        # Recuperiamo le sezioni del progetto per poterla assegnare/cambiare
         sez_docs = db.collection("sezioni_appunti").where("id_progetto", "==", prog_id).stream()
         opzioni_sezioni = ["Nessuna"] + [s.to_dict()['nome'] for s in sez_docs]
         sezione_attuale = t_data.get('sezione_nome', 'Nessuna')
@@ -339,67 +358,22 @@ def schermata_principale():
         else:
             oggi = date.today()
 
-            # CSS per il Kanban con colonne verticali affiancate e scorrimento orizzontale fluido
-            st.markdown("""
-            <style>
-                .kanban-board-wrapper {
-                    display: flex;
-                    flex-direction: row;
-                    flex-wrap: nowrap;
-                    gap: 1.2rem;
-                    overflow-x: auto;
-                    padding-bottom: 1.5rem;
-                    width: 100%;
-                }
-                .kanban-col {
-                    min-width: 330px;
-                    max-width: 330px;
-                    flex: 0 0 auto;
-                    background-color: #ffffff;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 12px;
-                    padding: 1.2rem;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-                    vertical-align: top;
-                }
-            </style>
-            """, unsafe_allow_html=True)
-
-            # Inizio contenitore flessibile orizzontale
-            st.markdown('<div class="kanban-board-wrapper">', unsafe_allow_html=True)
-
+            # Costruiamo il Kanban tramite un unico blocco HTML/Markdown per garantire lo scorrimento orizzontale corretto delle colonne
+            kanban_html = '<div class="kanban-wrapper">'
+            
             for idx, prog in enumerate(progetti_lista):
                 prog_id = prog['id']
-                
-                # Inizio singola colonna Kanban fissa
-                st.markdown('<div class="kanban-col">', unsafe_allow_html=True)
-                
-                st.markdown(f"### 📁 {prog['nome']}")
-                
-                # Bottoni di spostamento colonna
-                c_l, c_r = st.columns(2)
-                with c_l:
-                    if idx > 0 and st.button("◀️", key=f"p_left_{prog_id}"):
-                        prev_p = progetti_lista[idx - 1]
-                        db.collection("progetti").document(prog_id).update({"ordine": prev_p.get('ordine', idx)})
-                        db.collection("progetti").document(prev_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
-                        st.rerun()
-                with c_r:
-                    if idx < len(progetti_lista) - 1 and st.button("▶️", key=f"p_right_{prog_id}"):
-                        next_p = progetti_lista[idx + 1]
-                        db.collection("progetti").document(prog_id).update({"ordine": next_p.get('ordine', idx + 2)})
-                        db.collection("progetti").document(next_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
-                        st.rerun()
-
+                kanban_html += f'<div class="kanban-column">'
+                kanban_html += f'<h3>📁 {prog["nome"]}</h3>'
                 if prog.get('descrizione'):
-                    st.caption(prog['descrizione'])
-                st.markdown("---")
-
+                    kanban_html += f'<p style="font-size:0.85em; color:#64748b;">{prog["descrizione"]}</p>'
+                kanban_html += '<hr style="margin: 8px 0;">'
+                
+                # Recuperiamo le task per questo progetto
                 tasks_docs = db.collection("task").where("id_progetto", "==", prog_id).stream()
                 
                 for t_doc in tasks_docs:
                     t_data = t_doc.to_dict()
-                    t_id = t_doc.id
                     completata = t_data.get("completata", 0)
                     stato = t_data.get("stato", "Normale")
 
@@ -426,52 +400,79 @@ def schermata_principale():
                     sezione_collegata = t_data.get('sezione_nome', 'Nessuna')
                     badge_sezione = f"🔗 {sezione_collegata}" if sezione_collegata and sezione_collegata != "Nessuna" else ""
 
-                    card_html = f"""
+                    kanban_html += f"""
                     <div style="border: 2px solid {bordo_colore}; border-radius: 8px; padding: 10px; margin-bottom: 8px; background-color: #f8fafc;">
                         <strong style="color: #0f172a;">{t_data.get('titolo')}</strong><br>
                         <span style="font-size: 0.85em; color: #475569;">👤 {t_data.get('assegnatario', 'N/D')} | 📅 {scad_str or 'No scad'}</span><br>
                         <span style="font-size: 0.8em; color: #334155; background-color: #e2e8f0; padding: 2px 6px; border-radius: 4px;">{badge_sezione} | Stato: {stato}</span>
                     </div>
                     """
-                    st.markdown(card_html, unsafe_allow_html=True)
+                
+                kanban_html += '</div>' # Chiusura kanban-column
 
-                    if t_data.get('note_task'):
-                        st.info(f"📝 {t_data.get('note_task')}")
+            kanban_html += '</div>' # Chiusura kanban-wrapper
+            
+            # Mostriamo il tabellone Kanban fluido in orizzontale
+            st.markdown(kanban_html, unsafe_allow_html=True)
+            st.markdown("---")
 
-                    if st.button("⚙️ Modifica / Apri", key=f"btn_mod_{t_id}"):
-                        modal_modifica_task(t_id, t_data, prog_id)
-
-                with st.expander("➕ Aggiungi Task"):
-                    sez_docs = db.collection("sezioni_appunti").where("id_progetto", "==", prog_id).stream()
-                    opzioni_sezioni = ["Nessuna"] + [s.to_dict()['nome'] for s in sez_docs]
-
-                    with st.form(f"form_task_{prog_id}"):
-                        t_titolo = st.text_input("Titolo Task")
-                        t_nota = st.text_area("Note / Descrizione Task")
-                        t_sez = st.selectbox("Collega a Sezione Appunti", opzioni_sezioni)
-                        t_assegnatario = st.text_input("Assegnato a", value=st.session_state.utente_loggato)
-                        t_scad = st.date_input("Scadenza")
-                        
-                        if st.form_submit_button("Crea Task"):
-                            db.collection("task").add({
-                                "id_progetto": prog_id,
-                                "titolo": t_titolo,
-                                "note_task": t_nota,
-                                "sezione_nome": t_sez,
-                                "assegnatario": t_assegnatario,
-                                "scadenza": t_scad.strftime("%Y-%m-%d"),
-                                "stato": "Normale",
-                                "completata": 0,
-                                "preavviso": 3
-                            })
-                            st.success("Task creata!")
+            # Pulsanti di gestione colonna e task gestiti tramite Streamlit nativo sotto la visualizzazione o in griglia pulita
+            st.markdown("### ⚙️ Azioni sui Progetti e Task")
+            cols_azioni = st.columns(len(progetti_lista))
+            for idx, prog in enumerate(progetti_lista):
+                prog_id = prog['id']
+                with cols_azioni[idx]:
+                    st.markdown(f"**{prog['nome']}**")
+                    c_l, c_r = st.columns(2)
+                    with c_l:
+                        if idx > 0 and st.button("◀️", key=f"p_left_{prog_id}"):
+                            prev_p = progetti_lista[idx - 1]
+                            db.collection("progetti").document(prog_id).update({"ordine": prev_p.get('ordine', idx)})
+                            db.collection("progetti").document(prev_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
+                            st.rerun()
+                    with c_r:
+                        if idx < len(progetti_lista) - 1 and st.button("▶️", key=f"p_right_{prog_id}"):
+                            next_p = progetti_lista[idx + 1]
+                            db.collection("progetti").document(prog_id).update({"ordine": next_p.get('ordine', next_p.get('ordine', idx) + 1)})
+                            db.collection("progetti").document(next_p['id']).update({"ordine": prog.get('ordine', idx + 1)})
                             st.rerun()
 
-                # Chiusura div .kanban-col
-                st.markdown('</div>', unsafe_allow_html=True)
+                    # Elenco interattivo delle task per la gestione dei popup di modifica
+                    tasks_docs = db.collection("task").where("id_progetto", "==", prog_id).stream()
+                    for t_doc in tasks_docs:
+                        t_data = t_doc.to_dict()
+                        t_id = t_doc.id
+                        if nascondi_completate and t_data.get("completata", 0) == 1:
+                            continue
+                        if st.button(f"✏️ {t_data.get('titolo')[:15]}...", key=f"btn_mod_{t_id}"):
+                            modal_modifica_task(t_id, t_data, prog_id)
 
-            # Chiusura div .kanban-board-wrapper
-            st.markdown('</div>', unsafe_allow_html=True)
+                    with st.expander(f"➕ Task ({prog['nome']})"):
+                        sez_docs = db.collection("sezioni_appunti").where("id_progetto", "==", prog_id).stream()
+                        opzioni_sezioni = ["Nessuna"] + [s.to_dict()['nome'] for s in sez_docs]
+
+                        with st.form(f"form_task_{prog_id}"):
+                            t_titolo = st.text_input("Titolo Task", key=f"tit_{prog_id}")
+                            t_nota = st.text_area("Note Task", key=f"not_{prog_id}")
+                            t_sez = st.selectbox("Sezione", opzioni_sezioni, key=f"sez_{prog_id}")
+                            t_assegnatario = st.text_input("Assegnato a", value=st.session_state.utente_loggato, key=f"ass_{prog_id}")
+                            t_scad = st.date_input("Scadenza", key=f"scd_{prog_id}")
+                            
+                            if st.form_submit_button("Crea"):
+                                db.collection("task").add({
+                                    "id_progetto": prog_id,
+                                    "titolo": t_titolo,
+                                    "note_task": t_nota,
+                                    "sezione_nome": t_sez,
+                                    "assegnatario": t_assegnatario,
+                                    "scadenza": t_scad.strftime("%Y-%m-%d"),
+                                    "stato": "Normale",
+                                    "completata": 0,
+                                    "preavviso": 3
+                                })
+                                st.success("Task creata!")
+                                st.rerun()
+
     # --- 2. BOARD SCADENZE ---
     elif menu == "⏳ Board Scadenze":
         st.header("⏳ Board Scadenze")
