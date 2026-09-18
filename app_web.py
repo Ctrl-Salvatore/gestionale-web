@@ -338,36 +338,39 @@ def schermata_principale():
         else:
             oggi = date.today()
 
-            # INIZIO HACK CSS: Forza rigidamente larghezza e comportamento a scorrimento
+            # --- CSS BLINDATO PER TUTTE LE VERSIONI DI STREAMLIT ---
             st.markdown("""
             <style>
-                /* Contenitore principale (riga orizzontale) */
+                /* Blocca la griglia principale forzando lo scroll orizzontale */
                 div[data-testid="stHorizontalBlock"] {
                     flex-wrap: nowrap !important;
                     overflow-x: auto !important;
-                    padding-bottom: 20px;
+                    padding-bottom: 20px !important;
                     align-items: flex-start !important;
                 }
                 
-                /* Colonne Kanban principali (IGNORA le percentuali di Streamlit) */
-                div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-                    min-width: 360px !important; /* Forza larghezza minima */
-                    max-width: 360px !important; /* Forza larghezza massima */
-                    width: 360px !important;     /* Sovrascrive le percentuali inline! */
-                    flex: 0 0 360px !important;  /* Blocca la crescita/riduzione del flexbox */
-                    background-color: #f1f5f9;
-                    padding: 15px;
-                    border-radius: 10px;
-                    border: 1px solid #e2e8f0;
+                /* Forza larghezza colonne per vecchie (column) e nuove (stColumn) versioni di Streamlit */
+                div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+                div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+                    min-width: 360px !important; 
+                    max-width: 360px !important; 
+                    width: 360px !important;     
+                    flex: 0 0 360px !important;  
+                    background-color: #f1f5f9 !important;
+                    padding: 15px !important;
+                    border-radius: 10px !important;
+                    border: 1px solid #e2e8f0 !important;
                 }
 
-                /* RESET per le sotto-colonne all'interno delle card (es. bottoni di spostamento) */
-                div[data-testid="column"] div[data-testid="stHorizontalBlock"] {
+                /* Libera le sotto-colonne all'interno (es. pulsanti destra/sinistra) dalla regola precedente */
+                div[data-testid="column"] div[data-testid="stHorizontalBlock"],
+                div[data-testid="stColumn"] div[data-testid="stHorizontalBlock"] {
                     flex-wrap: wrap !important;
                     overflow-x: visible !important;
                     padding-bottom: 0 !important;
                 }
-                div[data-testid="column"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+                div[data-testid="column"] div[data-testid="stHorizontalBlock"] > div,
+                div[data-testid="stColumn"] div[data-testid="stHorizontalBlock"] > div {
                     min-width: 0 !important;
                     max-width: none !important;
                     width: auto !important;
