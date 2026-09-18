@@ -325,7 +325,7 @@ def schermata_principale():
     id_board = st.session_state.board_attiva_id
 
     # --- 1. KANBAN PROGETTI ---
-        elif menu == "📋 Board Progetti (Kanban)":
+    elif menu == "📋 Board Progetti (Kanban)":
         st.header(f"📋 Board Progetti Kanban - {st.session_state.board_attiva_nome}")
 
         nascondi_completate = st.checkbox("Nascondi task completate", value=False)
