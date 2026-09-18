@@ -339,12 +339,13 @@ def schermata_principale():
             oggi = date.today()
 
             # --- CSS BLINDATO E STILE TRELLO (SCROLLBAR SEMPRE VISIBILE) ---
+            # --- CSS DEFINITIVO: BOARD INTERAMENTE VISIBILE SENZA SCROLL VERTICALE ---
             st.markdown("""
             <style>
-                /* 1. Stile per rendere le scrollbar più evidenti e belle */
+                /* Stile e visibilità della barra di scorrimento orizzontale */
                 ::-webkit-scrollbar {
-                    height: 14px !important; /* Barra orizzontale più spessa */
-                    width: 8px !important;   /* Barra verticale per le colonne */
+                    height: 14px !important;
+                    width: 8px !important;
                 }
                 ::-webkit-scrollbar-track {
                     background: #f1f5f9 !important;
@@ -359,15 +360,16 @@ def schermata_principale():
                     background: #64748b !important;
                 }
 
-                /* 2. Contenitore principale orizzontale (Barra sempre a schermo) */
+                /* Contenitore orizzontale principale bloccato nello schermo */
                 div[data-testid="stHorizontalBlock"] {
                     flex-wrap: nowrap !important;
                     overflow-x: auto !important;
-                    padding-bottom: 15px !important;
+                    padding-bottom: 25px !important;
                     align-items: flex-start !important;
+                    max-height: 70vh !important; /* Impedisce al blocco di scendere troppo */
                 }
                 
-                /* 3. Colonne Kanban (Altezza fissa e scroll interno) */
+                /* Colonne Kanban con altezza ridotta e scorrimento interno pulito */
                 div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
                 div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
                     min-width: 360px !important; 
@@ -379,17 +381,18 @@ def schermata_principale():
                     border-radius: 10px !important;
                     border: 1px solid #e2e8f0 !important;
                     
-                    /* IL TRUCCO MAGICO: Limita l'altezza e fa scorrere l'interno */
-                    max-height: 75vh !important; 
+                    /* Altezza ottimizzata per mantenere visibile la barra in basso */
+                    max-height: 56vh !important; 
                     overflow-y: auto !important; 
                 }
 
-                /* 4. Resetta le sotto-colonne all'interno (es. pulsanti destra/sinistra) */
+                /* Ripristino delle sotto-colonne interne (es. pulsanti di spostamento) */
                 div[data-testid="column"] div[data-testid="stHorizontalBlock"],
                 div[data-testid="stColumn"] div[data-testid="stHorizontalBlock"] {
                     flex-wrap: wrap !important;
                     overflow-x: visible !important;
                     padding-bottom: 0 !important;
+                    max-height: none !important;
                 }
                 div[data-testid="column"] div[data-testid="stHorizontalBlock"] > div,
                 div[data-testid="stColumn"] div[data-testid="stHorizontalBlock"] > div {
@@ -405,7 +408,7 @@ def schermata_principale():
                 }
             </style>
             """, unsafe_allow_html=True)
-
+            
             colonne = st.columns(len(progetti_lista))
 
             for idx, prog in enumerate(progetti_lista):
