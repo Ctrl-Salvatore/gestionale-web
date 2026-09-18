@@ -3,16 +3,27 @@ import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime, date, timedelta
+import json
 
 # ==========================================
-# INIZIALIZZAZIONE FIREBASE
+# INIZIALIZZAZIONE FIREBASE (LOCALE / CLOUD)
 # ==========================================
 if not firebase_admin._apps:
     try:
-        cred = credentials.Certificate("firebase_key.json")
+        # Se siamo su Streamlit Cloud leggiamo dai secrets
+        if "firebase" in st.secrets:
+            cred_dict = dict(st.secrets["firebase"])
+            cred = credentials.Certificate(cred_dict)
+        elif "firebase_json" in st.secrets:
+            cred_dict = json.loads(st.secrets["firebase_json"])
+            cred = credentials.Certificate(cred_dict)
+        else:
+            # Altrimenti cerchiamo il file locale (per quando sviluppi sul PC)
+            cred = credentials.Certificate("firebase_key.json")
+            
         firebase_admin.initialize_app(cred)
     except Exception as e:
-        st.error(f"Errore di connessione a Firebase: Assicurati che 'firebase_key.json' sia nella cartella. Dettagli: {e}")
+        st.error(f"Errore di connessione a Firebase: Assicurati che i Secrets o il file 'firebase_key.json' siano configurati correttamente. Dettagli: {e}")
 
 db = firestore.client()
 
