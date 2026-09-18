@@ -339,42 +339,44 @@ def schermata_principale():
         else:
             oggi = date.today()
 
-            # Contenitore con scorrimento orizzontale per le colonne Kanban
+            # CSS per il Kanban con colonne verticali affiancate e scorrimento orizzontale fluido
             st.markdown("""
             <style>
-                .kanban-scroll-container {
+                .kanban-board-wrapper {
                     display: flex;
                     flex-direction: row;
-                    gap: 1rem;
+                    flex-wrap: nowrap;
+                    gap: 1.2rem;
                     overflow-x: auto;
-                    padding-bottom: 1rem;
+                    padding-bottom: 1.5rem;
                     width: 100%;
                 }
-                .kanban-column {
-                    min-width: 320px;
-                    max-width: 350px;
+                .kanban-col {
+                    min-width: 330px;
+                    max-width: 330px;
                     flex: 0 0 auto;
                     background-color: #ffffff;
                     border: 1px solid #e2e8f0;
                     border-radius: 12px;
-                    padding: 1rem;
+                    padding: 1.2rem;
                     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                    vertical-align: top;
                 }
             </style>
             """, unsafe_allow_html=True)
 
-            # Apertura del contenitore orizzontale HTML
-            st.markdown('<div class="kanban-scroll-container">', unsafe_allow_html=True)
+            # Inizio contenitore flessibile orizzontale
+            st.markdown('<div class="kanban-board-wrapper">', unsafe_allow_html=True)
 
             for idx, prog in enumerate(progetti_lista):
                 prog_id = prog['id']
                 
-                # Renderizziamo ogni colonna come blocco a scorrimento
-                st.markdown(f'<div class="kanban-column">', unsafe_allow_html=True)
+                # Inizio singola colonna Kanban fissa
+                st.markdown('<div class="kanban-col">', unsafe_allow_html=True)
                 
                 st.markdown(f"### 📁 {prog['nome']}")
                 
-                # Pulsanti di spostamento colonna compatti
+                # Bottoni di spostamento colonna
                 c_l, c_r = st.columns(2)
                 with c_l:
                     if idx > 0 and st.button("◀️", key=f"p_left_{prog_id}"):
@@ -465,10 +467,10 @@ def schermata_principale():
                             st.success("Task creata!")
                             st.rerun()
 
-                # Chiusura div singola colonna Kanban
+                # Chiusura div .kanban-col
                 st.markdown('</div>', unsafe_allow_html=True)
 
-            # Chiusura div contenitore principale di scorrimento
+            # Chiusura div .kanban-board-wrapper
             st.markdown('</div>', unsafe_allow_html=True)
     # --- 2. BOARD SCADENZE ---
     elif menu == "⏳ Board Scadenze":
