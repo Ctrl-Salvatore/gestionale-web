@@ -10,7 +10,6 @@ import json
 # ==========================================
 if not firebase_admin._apps:
     try:
-        # Se siamo su Streamlit Cloud leggiamo dai secrets
         if "firebase" in st.secrets:
             cred_dict = dict(st.secrets["firebase"])
             cred = credentials.Certificate(cred_dict)
@@ -18,7 +17,6 @@ if not firebase_admin._apps:
             cred_dict = json.loads(st.secrets["firebase_json"])
             cred = credentials.Certificate(cred_dict)
         else:
-            # Altrimenti cerchiamo il file locale (per quando sviluppi sul PC)
             cred = credentials.Certificate("firebase_key.json")
             
         firebase_admin.initialize_app(cred)
@@ -96,29 +94,71 @@ def attiva_notifiche_browser(lista_task_in_preavviso):
     st.session_state.data_ultima_notifica = oggi_str
 
 # ==========================================
-# LOGIN SEMPLIFICATO
+# SCHERMATA LOGIN / REGISTRAZIONE
 # ==========================================
 def schermata_login():
     st.title("🔐 Accesso al Gestionale Cloud")
-    st.markdown("Inserisci la tua email per accedere o simulare la sessione di lavoro.")
     
-    with st.form("form_login"):
-        email = st.text_input("Email utente")
-        btn_login = st.form_submit_button("Entra nel Gestionale")
-        
-        if btn_login and email:
-            st.session_state.utente_loggato = email.strip()
-            st.success("Accesso effettuato!")
-            st.rerun()
-        elif btn_login:
-            st.error("Inserisci un'email valida.")
+    tab_accedi, tab_registrati = st.tabs(["🔑 Accedi", "📝 Registrati"])
+    
+    # --- TAB ACCEDI ---
+    with tab_accedi:
+        st.markdown("Inserisci le tue credenziali per entrare.")
+        with st.form("form_login"):
+            email_login = st.text_input("Email", key="log_email")
+            password_login = st.text_input("Password", type="password", key="log_pass")
+            btn_entra = st.form_submit_button("Accedi")
+            
+            if btn_entra:
+                if not email_login or not password_login:
+                    st.error("Inserisci email e password.")
+                else:
+                    email_clean = email_login.strip().lower()
+                    # Verifichiamo le credenziali nel database
+                    utenti_ref = db.collection("utenti").where("email", "==", email_clean).where("password", "==", password_login).stream()
+                    utenti_lista = list(utenti_ref)
+                    
+                    if utenti_lista:
+                        st.session_state.utente_loggato = email_clean
+                        st.success("Accesso effettuato con successo!")
+                        st.rerun()
+                    else:
+                        st.error("Email o password errati.")
+
+    # --- TAB REGISTRATI ---
+    with tab_registrati:
+        st.markdown("Crea un nuovo account inserendo un'email e una password.")
+        with st.form("form_registrazione"):
+            email_reg = st.text_input("Nuova Email", key="reg_email")
+            password_reg = st.text_input("Nuova Password", type="password", key="reg_pass")
+            password_conferma = st.text_input("Conferma Password", type="password", key="reg_conf")
+            btn_reg = st.form_submit_button("Registrati")
+            
+            if btn_reg:
+                if not email_reg or not password_reg:
+                    st.error("Compila tutti i campi.")
+                elif password_reg != password_conferma:
+                    st.error("Le password non coincido.")
+                else:
+                    email_clean = email_reg.strip().lower()
+                    # Controlliamo se l'email esiste già
+                    gia_esistente = list(db.collection("utenti").where("email", "==", email_clean).stream())
+                    if gia_esistente:
+                        st.error("Questa email è già registrata. Prova ad accedere.")
+                    else:
+                        db.collection("utenti").add({
+                            "email": email_clean,
+                            "password": password_reg,
+                            "data_registrazione": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                        st.success("Registrazione completata! Ora puoi effettuare l'accesso nella scheda 'Accedi'.")
 
 # ==========================================
-# SELETTORE / GESTIONE BOARD & PERMESSI
+# SELETTORE / GESTIONE BOARD & ELIMINAZIONE
 # ==========================================
 def schermata_selezione_board():
     st.title(f"👋 Benvenuto, {st.session_state.utente_loggato}")
-    st.markdown("Seleziona una board a cui accedere o creane una nuova. I proprietari possono gestire i membri direttamente da qui.")
+    st.markdown("Seleziona una board a cui accedere o creane una nuova.")
 
     with st.expander("➕ Crea una Nuova Board"):
         with st.form("form_nuova_board"):
@@ -129,7 +169,7 @@ def schermata_selezione_board():
             if btn_crea_b and nome_board:
                 lista_membri = [st.session_state.utente_loggato]
                 if membri_extra:
-                    extra = [m.strip() for m in membri_extra.split(",") if m.strip()]
+                    extra = [m.strip().lower() for m in membri_extra.split(",") if m.strip()]
                     lista_membri.extend(extra)
                 
                 db.collection("board").add({
@@ -147,7 +187,7 @@ def schermata_selezione_board():
     mie_board = []
     for b in board_docs:
         b_data = b.to_dict()
-        membri = b_data.get("membri", [])
+        membri = [m.lower() for m in b_data.get("membri", [])]
         if st.session_state.utente_loggato in membri:
             mie_board.append({"id": b.id, **b_data})
 
@@ -171,9 +211,9 @@ def schermata_selezione_board():
                         st.session_state.board_attiva_nome = b['nome']
                         st.rerun()
 
-                # Se l'utente loggato è il PROPRIETARIO, mostriamo i controlli di gestione accessi
+                # Controlli di gestione se l'utente è il proprietario
                 if is_proprietario:
-                    with st.expander(f"⚙️ Gestione Accessi & Membri ({b['nome']})"):
+                    with st.expander(f"⚙️ Gestione Accessi & Eliminazione ({b['nome']})"):
                         membri_attuali = b.get("membri", [])
                         
                         st.markdown("**Invita un nuovo membro:**")
@@ -181,14 +221,14 @@ def schermata_selezione_board():
                             nuova_email = st.text_input("Email nuovo utente", key=f"email_{b_id}")
                             btn_invita = st.form_submit_button("Aggiungi alla Board")
                             if btn_invita and nuova_email:
-                                e_pulita = nuova_email.strip()
+                                e_pulita = nuova_email.strip().lower()
                                 if e_pulita not in membri_attuali:
                                     membri_attuali.append(e_pulita)
                                     db.collection("board").document(b_id).update({"membri": membri_attuali})
-                                    st.success(f"Utente {e_pulita} aggiunto con successo!")
+                                    st.success(f"Utente {e_pulita} aggiunto!")
                                     st.rerun()
                                 else:
-                                    st.warning("L'utente è già membro di questa board.")
+                                    st.warning("L'utente fa già parte della board.")
 
                         st.markdown("---")
                         st.markdown("**Rimuovi membri:**")
@@ -197,13 +237,36 @@ def schermata_selezione_board():
                             with c_m1:
                                 st.text(m + (" (Proprietario)" if m == proprietario else ""))
                             with c_m2:
-                                # Non permettiamo al proprietario di rimuovere se stesso per errore
                                 if m != proprietario:
                                     if st.button("Rimuovi", key=f"rem_{b_id}_{m}"):
                                         membri_attuali.remove(m)
                                         db.collection("board").document(b_id).update({"membri": membri_attuali})
                                         st.success(f"Membro {m} rimosso.")
                                         st.rerun()
+
+                        st.markdown("---")
+                        # --- ELIMINAZIONE BOARD ---
+                        if st.button("🗑️ Elimina Intera Board (e tutti i progetti associati)", key=f"del_board_{b_id}", type="primary"):
+                            # 1. Elimina la board
+                            db.collection("board").document(b_id).delete()
+                            
+                            # 2. Trova ed elimina i progetti associati e relativi dati
+                            progetti_collegati = db.collection("progetti").where("id_board", "==", b_id).stream()
+                            for p in progetti_collegati:
+                                p_id = p.id
+                                # Elimina sezioni
+                                sez_collegate = db.collection("sezioni_appunti").where("id_progetto", "==", p_id).stream()
+                                for s in sez_collegate:
+                                    db.collection("sezioni_appunti").document(s.id).delete()
+                                # Elimina task
+                                task_collegate = db.collection("task").where("id_progetto", "==", p_id).stream()
+                                for t in task_collegate:
+                                    db.collection("task").document(t.id).delete()
+                                # Elimina progetto
+                                db.collection("progetti").document(p_id).delete()
+
+                            st.success(f"Board '{b['nome']}' eliminata con successo!")
+                            st.rerun()
 
     st.markdown("---")
     if st.button("🚪 Esci (Logout)"):
