@@ -338,18 +338,36 @@ def schermata_principale():
         else:
             oggi = date.today()
 
-            # --- CSS BLINDATO PER TUTTE LE VERSIONI DI STREAMLIT ---
+            # --- CSS BLINDATO E STILE TRELLO (SCROLLBAR SEMPRE VISIBILE) ---
             st.markdown("""
             <style>
-                /* Blocca la griglia principale forzando lo scroll orizzontale */
+                /* 1. Stile per rendere le scrollbar più evidenti e belle */
+                ::-webkit-scrollbar {
+                    height: 14px !important; /* Barra orizzontale più spessa */
+                    width: 8px !important;   /* Barra verticale per le colonne */
+                }
+                ::-webkit-scrollbar-track {
+                    background: #f1f5f9 !important;
+                    border-radius: 10px !important;
+                }
+                ::-webkit-scrollbar-thumb {
+                    background: #94a3b8 !important;
+                    border-radius: 10px !important;
+                    border: 3px solid #f1f5f9 !important;
+                }
+                ::-webkit-scrollbar-thumb:hover {
+                    background: #64748b !important;
+                }
+
+                /* 2. Contenitore principale orizzontale (Barra sempre a schermo) */
                 div[data-testid="stHorizontalBlock"] {
                     flex-wrap: nowrap !important;
                     overflow-x: auto !important;
-                    padding-bottom: 20px !important;
+                    padding-bottom: 15px !important;
                     align-items: flex-start !important;
                 }
                 
-                /* Forza larghezza colonne per vecchie (column) e nuove (stColumn) versioni di Streamlit */
+                /* 3. Colonne Kanban (Altezza fissa e scroll interno) */
                 div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
                 div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
                     min-width: 360px !important; 
@@ -360,9 +378,13 @@ def schermata_principale():
                     padding: 15px !important;
                     border-radius: 10px !important;
                     border: 1px solid #e2e8f0 !important;
+                    
+                    /* IL TRUCCO MAGICO: Limita l'altezza e fa scorrere l'interno */
+                    max-height: 75vh !important; 
+                    overflow-y: auto !important; 
                 }
 
-                /* Libera le sotto-colonne all'interno (es. pulsanti destra/sinistra) dalla regola precedente */
+                /* 4. Resetta le sotto-colonne all'interno (es. pulsanti destra/sinistra) */
                 div[data-testid="column"] div[data-testid="stHorizontalBlock"],
                 div[data-testid="stColumn"] div[data-testid="stHorizontalBlock"] {
                     flex-wrap: wrap !important;
@@ -378,6 +400,8 @@ def schermata_principale():
                     background-color: transparent !important;
                     padding: 0 !important;
                     border: none !important;
+                    max-height: none !important;
+                    overflow-y: visible !important;
                 }
             </style>
             """, unsafe_allow_html=True)
